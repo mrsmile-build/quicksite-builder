@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QuickSite Builder</title>
+
+<style>
+/* ===========================
+   BASE STYLE
+=========================== */
+*{box-sizing:border-box;margin:0;padding:0;font-family:system-ui}
+body{background:#eef2ff;color:#111}
+
+header{
+  background:#4f46e5;
+  color:white;
+  padding:14px 16px;
+  font-size:20px;
+  font-weight:700;
+}
+
+/* TOP BAR */
+.top-tools{
+  display:flex;
+  gap:8px;
+  padding:10px;
+  background:white;
+  border-bottom:1px solid #ddd;
+  position:sticky;
+  top:0;
+  z-index:10;
+}
+.top-tools button{
+  padding:10px 14px;
+  border:none;
+  border-radius:6px;
+  cursor:pointer;
+  font-weight:600;
+  background:#e5e7eb;
+}
+.top-tools .primary{background:#4f46e5;color:white}
+.top-tools .success{background:#10b981;color:white}
+
+/* CANVAS */
+#canvas{
+  min-height:70vh;
+  background:white;
+  margin:16px;
+  border-radius:10px;
+  padding:12px;
+}
+
+/* SECTIONS */
+.section{
+  position:relative;
+  margin-bottom:14px;
+  border:2px dashed transparent;
+  border-radius:8px;
+}
+.section:hover{border-color:#4f46e5}
+
+/* CONTROLS */
+.controls{
+  position:absolute;
+  top:6px;
+  right:6px;
+  display:flex;
+  gap:4px;
+}
+.controls button{
+  border:none;
+  padding:6px 8px;
+  border-radius:4px;
+  cursor:pointer;
+  background:#111;
+  color:white;
+  font-size:12px;
+}
+
+/* EDITABLE */
+[contenteditable]:focus{
+  outline:2px dashed #4f46e5;
+  padding:4px;
+}
+
+/* MODALS */
+.modal{
+  display:none;
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.6);
+  align-items:center;
+  justify-content:center;
+  z-index:50;
+}
+.modal-box{
+  background:white;
+  width:92%;
+  max-width:480px;
+  padding:20px;
+  border-radius:12px;
+}
+.modal-box h3{margin-bottom:12px}
+
+/* COLOR GRID */
+.color-grid{
+  display:grid;
+  grid-template-columns:repeat(6,1fr);
+  gap:8px;
+  margin-bottom:12px;
+}
+.color-box{
+  height:32px;
+  border-radius:6px;
+  cursor:pointer;
+  box-shadow:0 0 0 1px #ccc;
+}
+.gradient-box{
+  height:36px;
+  border-radius:8px;
+  cursor:pointer;
+}
+
+input,textarea{
+  width:100%;
+  padding:10px;
+  margin-bottom:10px;
+}
+button.action{
+  padding:10px 14px;
+  border:none;
+  border-radius:6px;
+  cursor:pointer;
+  font-weight:600;
+  background:#4f46e5;
+  color:white;
+}
+</style>
+</head>
+
+<body>
+
+<header>⚡ QuickSite Builder</header>
+
+<div class="top-tools">
+  <button onclick="addSection('hero')">Hero</button>
+  <button onclick="addSection('text')">Text</button>
+  <button onclick="addSection('button')">Button</button>
+  <button onclick="addSection('image')">Image</button>
+  <button class="success" onclick="saveProject()">Save</button>
+  <button class="primary" onclick="exportSite()">Export</button>
+  <button onclick="openFeedback()">Feedback</button>
+</div>
+
+<div id="canvas"></div>
+
+<!-- SETTINGS MODAL -->
+<div class="modal" id="settingsModal">
+  <div class="modal-box">
+    <h3>🎨 Section Settings</h3>
+    <b>Text Color</b>
+    <div class="color-grid" id="textColors"></div>
+
+    <b>Background Color</b>
+    <div class="color-grid" id="bgColors"></div>
+
+    <b>Gradient</b>
+    <div class="color-grid" id="gradients"></div>
+
+    <b>Font Size</b>
+    <input type="range" min="12" max="64" id="fontSizeRange">
+
+    <button class="action" id="boldBtn">Bold</button>
+    <button id="closeSettingsBtn">Close</button>
+  </div>
+</div>
+
+<!-- FEEDBACK MODAL -->
+<div class="modal" id="feedbackModal">
+  <div class="modal-box">
+    <h3>Feedback</h3>
+    <textarea id="feedbackText" placeholder="What worked? What didn't?"></textarea>
+    <button class="action" id="sendFeedbackBtn">Send</button>
+    <button id="closeFeedbackBtn">Close</button>
+  </div>
+</div>
+
+<script>
+// ============================
+// APP LOGIC
+// ============================
+let selected=null;
+let copiedHTML=null;
+const canvas=document.getElementById('canvas');
+
+const components={
+hero:`<div contenteditable style="padding:80px;text-align:center;background:#4f46e5;color:white">
+<h1 style="font-size:48px">Build Your Website</h1>
+<p style="font-size:20px">Click to edit</p>
+</div>`,
+text:`<div contenteditable style="padding:40px">
+<h2>Section Title</h2><p>Edit text</p>
+</div>`,
+button:`<div style="padding:40px;text-align:center">
+<button contenteditable style="padding:14px 28px;background:#4f46e5;color:white;border:none;border-radius:6px">Click Me</button>
+</div>`,
+image:`<div style="padding:40px;text-align:center">
+<img src="https://via.placeholder.com/600x300" style="max-width:100%">
+</div>`
+};
+
+// Color setup
+const textColors=['#111','#ef4444','#10b981','#3b82f6','#f59e0b','#8b5cf6'];
+const bgColors=['#ffffff','#f3f4f6','#e0e7ff','#ecfeff','#111827','#fef3c7'];
+const gradients=[
+  'linear-gradient(135deg,#667eea,#764ba2)',
+  'linear-gradient(135deg,#10b981,#059669)',
+  'linear-gradient(135deg,#f97316,#ef4444)',
+  'linear-gradient(135deg,#3b82f6,#06b6d4)',
+  'linear-gradient(135deg,#111827,#4f46e5)'
+];
+
+// Populate color grids
+const textColorsDiv=document.getElementById('textColors');
+textColors.forEach(c=>{
+  const d=document.createElement('div'); d.className='color-box'; d.style.background=c;
+  d.onclick=()=>setTextColor(c);
+  textColorsDiv.appendChild(d);
+});
+const bgColorsDiv=document.getElementById('bgColors');
+bgColors.forEach(c=>{
+  const d=document.createElement('div'); d.className='color-box'; d.style.background=c;
+  d.onclick=()=>setBg(c);
+  bgColorsDiv.appendChild(d);
+});
+const gradientsDiv=document.getElementById('gradients');
+gradients.forEach(g=>{
+  const d=document.createElement('div'); d.className='gradient-box'; d.style.background=g;
+  d.onclick=()=>setGradient(d);
+  gradientsDiv.appendChild(d);
+});
+
+// Events
+document.getElementById('fontSizeRange').oninput=e=>setFont(e.target.value);
+document.getElementById('boldBtn').onclick=toggleBold;
+document.getElementById('closeSettingsBtn').onclick=()=>settingsModal.style.display='none';
+document.getElementById('closeFeedbackBtn').onclick=()=>feedbackModal.style.display='none';
+document.getElementById('sendFeedbackBtn').onclick=sendFeedback;
+
+// Functions
+function addSection(type){
+  const d=document.createElement('div');
+  d.className='section';
+  d.innerHTML=components[type]+controls();
+  d.onclick=()=>selected=d;
+  canvas.appendChild(d);
+  save();
+}
+
+function controls(){
+  return `<div class="controls">
+    <button onclick="up(event)">↑</button>
+    <button onclick="down(event)">↓</button>
+    <button onclick="copySection(event)">📋</button>
+    <button onclick="openSettings(event)">⚙️</button>
+    <button onclick="del(event)">✕</button>
+  </div>`;
+}
+
+function up(e){e.stopPropagation();const s=e.target.closest('.section');if(s.previousElementSibling)s.before(s.previousElementSibling);save()}
+function down(e){e.stopPropagation();const s=e.target.closest('.section');if(s.nextElementSibling)s.after(s.nextElementSibling);save()}
+function del(e){e.stopPropagation();e.target.closest('.section').remove();save()}
+function copySection(e){e.stopPropagation();copiedHTML=e.target.closest('.section').innerHTML;alert('Section copied. Add a new section and paste manually if needed.')}
+function openSettings(e){e.stopPropagation();selected=e.target.closest('.section');settingsModal.style.display='flex'}
+function setTextColor(c){if(selected)selected.querySelectorAll('[contenteditable],h1,h2,p,button').forEach(el=>el.style.color=c);}
+function setBg(c){if(selected){selected.style.background=c;selected.style.backgroundImage='none'}}
+function setGradient(el){if(selected)selected.style.backgroundImage=el.style.background}
+function setFont(v){if(selected)selected.style.fontSize=v+'px'}
+function toggleBold(){if(selected)selected.style.fontWeight=selected.style.fontWeight==='bold'?'normal':'bold'}
+
+function exportSite(){
+  alert(
+`Your website will download as an HTML file.
+
+You can:
+• Upload it to Netlify, GitHub Pages, or any host
+• Or we can host it for you in future versions`
+  );
+  const html=`<!DOCTYPE html><html><body>${canvas.innerHTML}</body></html>`;
+  const blob=new Blob([html],{type:'text/html'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='website.html';
+  a.click();
+}
+
+function save(){localStorage.setItem('qs_canvas',canvas.innerHTML)}
+function saveProject(){save();alert('Project saved on this device')}
+window.onload=()=>canvas.innerHTML=localStorage.getItem('qs_canvas')||''
+
+function openFeedback(){feedbackModal.style.display='flex'}
+function sendFeedback(){localStorage.setItem('qs_feedback',feedbackText.value);alert('Thanks! Your feedback helps improve QuickSite.');feedbackModal.style.display='none'}
+</script>
+
+</body>
+</html>
